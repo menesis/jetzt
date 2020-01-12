@@ -125,7 +125,7 @@
       instr.leftWrap = wraps.map(function (w) { return w.left; }).join("");
       instr.rightWrap = wraps.map(function (w) { return w.right; }).reverse().join("");
       return instr;
-    }
+    };
 
     // put a spacer before the next token
     this.spacer = function () {
@@ -173,6 +173,7 @@
   var wraps = {
     guillemot: {left: "«", right: "»"},
     double_quote: {left: "“", right: "”"},
+    lithuanian_quote: {left: "„", right: "“"},
     parens: {left: "(", right: ")"},
     heading: {left: "#", right: ""},
     blockquote: {left: "›", right: ""}  // U+203A
@@ -240,7 +241,7 @@
           case "SECTION":
           case "P":
             inst.modNext("start_paragraph");
-            parseDom(node, inst)
+            parseDom(node, inst);
             inst.modPrev("end_paragraph");
             break;
           case "#comment":
@@ -257,22 +258,36 @@
   function parseText (text,$instructionator) {
     if (config("strip_citation")) text = stripInTextCitation(text);
                         // long dashes ↓
-    var tokens = text.match(/["«»“”\(\)\/–—]|--+|\n+|[^\s"“«»”\(\)\/–—]+/g);
+    var tokens = text.match(/["«»“”„\(\)\/–—]|--+|\n+|[^\s"“«»”„\(\)\/–—]+/g);
     if (tokens === null) tokens = [];
 
     var $ = ($instructionator) ? $instructionator :  new Instructionator();
 
     // doesn't handle nested double quotes, but that junk is *rare*;
     var double_quote_state = false;
+    var lithuanian_quote_level = 0;
 
     for (var i=0; i<tokens.length; i++) {
       var tkn = tokens[i];
 
       switch (tkn) {
-        case "“":
+        case "„":
           $.spacer();
-          $.pushWrap(wraps.double_quote);
+          $.pushWrap(wraps.lithuanian_quote);
           $.modNext("start_clause");
+          lithuanian_quote_level += 1;
+          break;
+        case "“":
+          if (lithuanian_quote_level > 0) {
+            $.popWrap(wraps.lithuanian_quote);
+            $.modPrev("end_clause");
+            $.spacer();
+            lithuanian_quote_level -= 1;
+          } else {
+            $.spacer();
+            $.pushWrap(wraps.double_quote);
+            $.modNext("start_clause");
+          }
           break;
         case "”":
           $.popWrap(wraps.double_quote);
@@ -291,7 +306,7 @@
           break;
         case "\"":
           if (double_quote_state) {
-            $.popWrap(wraps.double_quote)
+            $.popWrap(wraps.double_quote);
             $.spacer();
             $.modNext("start_clause");
           } else {
